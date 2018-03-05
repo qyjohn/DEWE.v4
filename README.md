@@ -23,3 +23,7 @@ DEWE.v4 is a platform providing Workflow-Exexution-as-a-Service. It includes thr
 (4) Lambda Job Handler
 
 - Executes workflows jobs when invoked and sends ACK to an ACK queue.
+
+(5) Database
+
+Keeps track of everything...
