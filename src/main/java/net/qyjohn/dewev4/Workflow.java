@@ -115,13 +115,9 @@ public class Workflow
          
 	public void parseDocument() throws Exception 
 	{
-/*
-		S3Object s3Object= client.getObject(bucket, prefix+"/dag.xml");
-		S3ObjectInputStream in = s3Object.getObjectContent();
-		document = reader.read(in);
-*/
-		download(bucket, prefix+"/dag.xml", "/tmp/dag.xml");
-		document = reader.read(new File("/tmp/dag.xml"));
+		String dagFile = "/tmp/" + uuid + ".xml";
+		download(bucket, prefix+"/dag.xml", dagFile);
+		document = reader.read(new File(dagFile));
 	}
 	
 	/**

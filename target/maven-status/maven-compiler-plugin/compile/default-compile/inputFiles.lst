@@ -1,4 +1,5 @@
 /efs/DEWE.v4/src/main/java/net/qyjohn/dewev4/LocalWorker.java
 /efs/DEWE.v4/src/main/java/net/qyjohn/dewev4/Workflow.java
 /efs/DEWE.v4/src/main/java/net/qyjohn/dewev4/WorkflowScheduler.java
+/efs/DEWE.v4/src/main/java/net/qyjohn/dewev4/LambdaWorker.java
 /efs/DEWE.v4/src/main/java/net/qyjohn/dewev4/WorkflowJob.java

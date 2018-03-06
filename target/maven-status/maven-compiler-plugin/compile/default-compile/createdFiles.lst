@@ -1,3 +1,4 @@
+net/qyjohn/dewev4/LambdaWorker.class
 net/qyjohn/dewev4/WorkflowScheduler$AckPuller.class
 net/qyjohn/dewev4/WorkflowScheduler.class
 net/qyjohn/dewev4/LocalWorker.class

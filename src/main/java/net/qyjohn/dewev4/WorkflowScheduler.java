@@ -5,25 +5,19 @@ import java.nio.*;
 import java.util.*;
 import com.amazonaws.services.s3.*;
 import com.amazonaws.services.s3.model.*;
-import com.amazonaws.services.kinesis.*;
-import com.amazonaws.services.kinesis.model.*;
 import com.amazonaws.services.sqs.*;
 import com.amazonaws.services.sqs.model.*;
 import org.apache.log4j.Logger;
 
 public class WorkflowScheduler extends Thread
 {
-	public AmazonKinesisClient kinesisClient = new AmazonKinesisClient();
 	public AmazonSQSClient sqsClient = new AmazonSQSClient();
 	String jobStream, ackStream;
 	String longQueue, ackQueue, deweComm;
-	List<Shard> ackShards = new ArrayList<Shard>();
-	Map<String, String> ackIterators = new HashMap<String, String>();
 
 	Workflow workflow;
-	String uuid, s3Bucket, s3Prefix, tempDir;
-	boolean localExec, cleanUp, completed;
-	public String caching = "false";
+	String uuid, s3Bucket, s3Prefix;
+	boolean localExec, completed;
 	public int localPerc=0;
 	
 	final static Logger logger = Logger.getLogger(WorkflowScheduler.class);
@@ -38,11 +32,9 @@ public class WorkflowScheduler extends Thread
 			Properties prop = new Properties();
 			InputStream input = new FileInputStream("config.properties");
 			prop.load(input);
-			jobStream = prop.getProperty("jobStream");
 			longQueue = prop.getProperty("longQueue");
 			ackQueue = prop.getProperty("ackQueue");
 			localExec = Boolean.parseBoolean(prop.getProperty("localExec"));
-			cleanUp   = Boolean.parseBoolean(prop.getProperty("cleanUp"));
 			localPerc = Integer.parseInt(prop.getProperty("localPerc"));
 	
 			// House keeping
@@ -107,12 +99,7 @@ public class WorkflowScheduler extends Thread
 						}
 						else
 						{
-							byte[] bytes = job.jobXML.getBytes();
-							PutRecordRequest putRecord = new PutRecordRequest();
-							putRecord.setStreamName(jobStream);
-							putRecord.setPartitionKey(UUID.randomUUID().toString());
-							putRecord.setData(ByteBuffer.wrap(bytes));
-							kinesisClient.putRecord(putRecord);
+							// Dispatch to Lambda function
 						}
 					}
 					success = true;
@@ -189,20 +176,6 @@ public class WorkflowScheduler extends Thread
 		d2 = new Date();
 		long seconds = (d2.getTime()-d1.getTime())/1000;
 		System.out.println("\n\nTotal execution time: " + seconds + " seconds.\n\n");
-
-		// delete the temp foler
-		if (cleanUp)
-		{
-			try
-			{
-				Process p = Runtime.getRuntime().exec("rm -Rf " + tempDir);
-				p.waitFor();
-			} catch (Exception e)
-			{
-				System.out.println(e.getMessage());
-				e.printStackTrace();	
-			}
-		}
 		System.exit(0);
 	}
 	
@@ -232,6 +205,7 @@ public class WorkflowScheduler extends Thread
 			}	
 		}		
 	}
+	
 	public void purgeQueue()
 	{
 			try

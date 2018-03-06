@@ -4,14 +4,9 @@ import java.io.*;
 import java.nio.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import com.amazonaws.ClientConfiguration;
-import com.amazonaws.services.lambda.runtime.*; 
-import com.amazonaws.services.lambda.runtime.events.*;
 import com.amazonaws.services.s3.*;
 import com.amazonaws.services.s3.model.*;
-import com.amazonaws.services.kinesis.*;
-import com.amazonaws.services.kinesis.model.*;
 import org.dom4j.*;
 import org.dom4j.io.SAXReader;
 import org.apache.commons.io.IOUtils;
@@ -22,14 +17,12 @@ import com.amazonaws.services.sqs.model.*;
 public class LocalWorker extends Thread
 {
 	// Common components
-	public String longQueue, ackQueue;
+	public String longQueue, ackQueue, region;
 	public AmazonS3Client s3Client;
-	public AmazonKinesisClient kinesisClient;
-	public AmazonSQSClient sqsClient = new AmazonSQSClient();
+	public AmazonSQSClient sqsClient;;
 	public String workflow, bucket, prefix, jobId, jobName, command;
 	public String tempDir = "/tmp";
 	public ConcurrentHashMap<String, Boolean> cachedFiles;
-	ConcurrentLinkedQueue<String> jobQueue;
 
 	// Logging
 	final static Logger logger = Logger.getLogger(LocalWorker.class);
@@ -41,10 +34,22 @@ public class LocalWorker extends Thread
 	 *
 	 */
 
-	public LocalWorker(String tempDir)
+	public LocalWorker(String tempDir, ConcurrentHashMap<String, Boolean> cachedFiles)
 	{
+		this.cachedFiles = cachedFiles;
+		
 		try
 		{
+			// System Properties
+			Properties prop = new Properties();
+			InputStream input = new FileInputStream("config.properties");
+			prop.load(input);
+			longQueue = prop.getProperty("longQueue");
+			ackQueue = prop.getProperty("ackQueue");
+
+			// Initialization
+			s3Client = new AmazonS3Client();
+			sqsClient = new AmazonSQSClient();
 		} catch (Exception e)
 		{
 			System.out.println(e.getMessage());
@@ -84,7 +89,9 @@ public class LocalWorker extends Thread
 
 		try
 		{
+			System.out.println(jobXML);
 			Element job = DocumentHelper.parseText(jobXML).getRootElement();
+			workflow = job.attributeValue("workflow");
 			bucket   = job.attributeValue("bucket");
 			prefix   = job.attributeValue("prefix");
 			jobId    = job.attributeValue("id");
@@ -94,6 +101,10 @@ public class LocalWorker extends Thread
 			logger.info(jobId + "\t" + jobName);
 			logger.debug(jobXML);
 
+			// Current tempDir is /tmp/uuid-of-workflow
+			tempDir = "/tmp/" + workflow;
+			runCommand("mkdir -p " + tempDir, "/tmp");
+			
 			// Download binary and input files
 			download("bin", job.attribute("binFiles").getValue());
 			download("workdir", job.attribute("inFiles").getValue());
@@ -146,11 +157,12 @@ public class LocalWorker extends Thread
 	
 	public void download_one(String folder, String filename)
 	{
+			String cacheTag = workflow + ":" + filename;
 			try
 			{
-				if (cachedFiles.get(filename) == null)
+				if (cachedFiles.get(cacheTag) == null)
 				{
-					cachedFiles.put(filename, new Boolean(false));
+					cachedFiles.put(cacheTag, new Boolean(false));
 					String key     = prefix + "/" + folder + "/" + filename;
 					String outfile = tempDir + "/" + filename;
 		
@@ -183,11 +195,11 @@ public class LocalWorker extends Thread
 							sleep(1000);
 						}
 					}
-					cachedFiles.put(filename, new Boolean(true));
+					cachedFiles.put(cacheTag, new Boolean(true));
 				}
 				else
 				{
-					while (cachedFiles.get(filename).booleanValue() == false)
+					while (cachedFiles.get(cacheTag).booleanValue() == false)
 					{
 						try
 						{
@@ -242,9 +254,11 @@ public class LocalWorker extends Thread
 	
 	public void upload_one(String filename)
 	{
+			String cacheTag = workflow + ":" + filename;
+
 			try
 			{
-				cachedFiles.put(filename, new Boolean(false));
+				cachedFiles.put(cacheTag, new Boolean(false));
 				String key  = prefix + "/workdir/" + filename;
 				String file = tempDir + "/" + filename;
 
@@ -255,7 +269,7 @@ public class LocalWorker extends Thread
 					try
 					{
 						s3Client.putObject(new PutObjectRequest(bucket, key, new File(file)));
-						cachedFiles.put(filename, new Boolean(true));
+						cachedFiles.put(cacheTag, new Boolean(true));
 						success = true;
 					} catch (Exception e1)
 					{
@@ -305,11 +319,12 @@ public class LocalWorker extends Thread
 	{
 		try
 		{
+			ConcurrentHashMap<String, Boolean> cachedFiles = new ConcurrentHashMap<String, Boolean>();
 			int nProc = Runtime.getRuntime().availableProcessors();
 			LocalWorker workers[] = new LocalWorker[nProc];
 			for (int i=0; i<nProc; i++)
 			{
-				workers[i] = new LocalWorker("/tmp");
+				workers[i] = new LocalWorker("/tmp", cachedFiles);
 				workers[i].start();
 			}
 		} catch (Exception e)
